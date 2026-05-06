@@ -2,6 +2,9 @@ const express = require("express");
 const app = express();
 app.use(express.json());
 
+// ════════════════════════════════════════
+//  CONFIG
+// ════════════════════════════════════════
 const CONFIG = {
   VERIFY_TOKEN:    process.env.VERIFY_TOKEN,
   WHATSAPP_TOKEN:  process.env.WHATSAPP_TOKEN,
@@ -16,6 +19,7 @@ const CONFIG = {
     timing:  "Roz Subah 11:00 baje se Raat 11:30 baje tak",
   },
 
+  // Public image URLs — aap inhe apni images se badal sakte hain
   IMAGES: {
     welcome:  "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800",
     menu:     "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800",
@@ -55,6 +59,9 @@ const CONFIG = {
   },
 };
 
+// ════════════════════════════════════════
+//  SESSION STORE
+// ════════════════════════════════════════
 const sessions = {};
 function getSession(from) {
   if (!sessions[from]) {
@@ -67,6 +74,9 @@ function resetSession(from) {
   return sessions[from];
 }
 
+// ════════════════════════════════════════
+//  WEBHOOK SETUP
+// ════════════════════════════════════════
 app.get("/webhook", (req, res) => {
   if (req.query["hub.mode"] === "subscribe" && req.query["hub.verify_token"] === CONFIG.VERIFY_TOKEN) {
     return res.status(200).send(req.query["hub.challenge"]);
@@ -87,15 +97,24 @@ app.post("/webhook", async (req, res) => {
   res.sendStatus(200);
 });
 
+// ════════════════════════════════════════
+//  MAIN MESSAGE HANDLER
+// ════════════════════════════════════════
 async function handleMessage(from, text) {
   const t   = text.toLowerCase().trim();
   const ses = getSession(from);
+
+  // Global reset triggers
   if (["hi","hello","namaste","hey","hii","start","0","home",""].includes(t)) {
     resetSession(from);
     return await sendWelcome(from);
   }
   if (t === "help" || t === "?") return await sendHelp(from);
-  if (t === "cart" || t === "c") { ses.step = "cart"; return await showCart(from, ses); }
+  if (t === "cart" || t === "c") {
+    ses.step = "cart";
+    return await showCart(from, ses);
+  }
+
   switch (ses.step) {
     case "idle":
     case "main_menu":     return await handleMainMenu(from, t, ses);
@@ -111,193 +130,398 @@ async function handleMessage(from, text) {
     case "table_people":  return await handleTablePeople(from, text, ses);
     case "table_name":    return await handleTableName(from, text, ses);
     case "table_confirm": return await handleTableConfirm(from, t, ses);
-    default: resetSession(from); return await sendWelcome(from);
+    default:
+      resetSession(from);
+      return await sendWelcome(from);
   }
 }
 
+// ════════════════════════════════════════
+//  WELCOME MESSAGE
+// ════════════════════════════════════════
 async function sendWelcome(from) {
   await sendImage(from, CONFIG.IMAGES.welcome,
-    `╔══════════════════════════╗\n🙏 *NAMASTE JI! SWAGAT HAI!*\n*${CONFIG.RESTAURANT.naam}*\n╚══════════════════════════╝\n\n_"Ghar ka swad, dil ka rishta"_ 💚\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\nAap kya karna chahenge? 👇\n\n*1* 🍽️  Menu Dekhna\n*2* 🛒  Order Karna\n*3* 📅  Table Book Karna\n*4* ⏰  Timing Jaanana\n*5* 📍  Location Dekhna\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n💬 Koi bhi number type karein\n🌐 ${CONFIG.RESTAURANT.website}`
+    `╔══════════════════════════╗\n` +
+    `  🙏 *NAMASTE JI! SWAGAT HAI!*\n` +
+    `  *${CONFIG.RESTAURANT.naam}*\n` +
+    `╚══════════════════════════╝\n\n` +
+    `_"Ghar ka swad, dil ka rishta"_ 💚\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `Aap kya karna chahenge? 👇\n\n` +
+    `*1* 🍽️  Menu Dekhna\n` +
+    `*2* 🛒  Order Karna\n` +
+    `*3* 📅  Table Book Karna\n` +
+    `*4* ⏰  Timing Jaanana\n` +
+    `*5* 📍  Location Dekhna\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `💬 Koi bhi number type karein\n` +
+    `🌐 ${CONFIG.RESTAURANT.website}`
   );
 }
 
+// ════════════════════════════════════════
+//  MAIN MENU ROUTER
+// ════════════════════════════════════════
 async function handleMainMenu(from, t, ses) {
   if (t === "1" || t.includes("menu")) {
-    ses.step = "menu_category"; ses._ordering = false;
+    ses.step = "menu_category";
+    ses._ordering = false;
     return await sendMenuCategories(from, false);
   }
   if (t === "2" || t.includes("order")) {
-    ses.step = "menu_category"; ses.cart = []; ses._ordering = true;
+    ses.step = "menu_category";
+    ses.cart = [];
+    ses._ordering = true;
     return await sendImage(from, CONFIG.IMAGES.menu,
-      `🛒 *ORDER KAREIN!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nMenu se items chunein 😋\n\nKaun si category? 👇\n\n*1* ⭐  Best Sellers\n*2* 🍽️  Special Items\n*3* 📜  Poora Menu\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*0* 🏠  Home`);
+      `🛒 *ORDER KAREIN!*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `Menu se items chunein aur cart mein add karein 😋\n\n` +
+      `Kaun si category? 👇\n\n` +
+      `*1* ⭐  Best Sellers\n` +
+      `*2* 🍽️  Special Items\n` +
+      `*3* 📜  Poora Menu\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `*0* 🏠  Home`
+    );
   }
   if (t === "3" || t.includes("table") || t.includes("book")) {
-    ses.step = "table_date"; ses.booking = {};
-    return await send(from, `📅 *TABLE BOOKING*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nAapka swagat hai! 🙏\n\n*Kaunsi tarikh ko aana chahte hain?*\n\n📝 Format: *DD/MM/YYYY*\n📝 Example: *25/06/2025*\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*0* 🏠  Home`);
+    ses.step = "table_date";
+    ses.booking = {};
+    return await send(from,
+      `📅 *TABLE BOOKING*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `Aapka swagat hai! 🙏\n\n` +
+      `*Kaunsi tarikh ko aana chahte hain?*\n\n` +
+      `📝 Format: *DD/MM/YYYY*\n` +
+      `📝 Example: *25/06/2025*\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `*0* 🏠  Home`
+    );
   }
-  if (t === "4" || t.includes("timing")) {
-    return await send(from, `⏰ *KHULNE KA SAMAY*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🕙 ${CONFIG.RESTAURANT.timing}\n\n📞 ${CONFIG.RESTAURANT.phone}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*0* 🏠  Home`);
+  if (t === "4" || t.includes("timing") || t.includes("time")) {
+    return await send(from,
+      `⏰ *KHULNE KA SAMAY*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🕙 ${CONFIG.RESTAURANT.timing}\n\n` +
+      `📞 Reservation: ${CONFIG.RESTAURANT.phone}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `*0* 🏠  Home`
+    );
   }
-  if (t === "5" || t.includes("location") || t.includes("address")) {
+  if (t === "5" || t.includes("location") || t.includes("address") || t.includes("kahan")) {
     return await sendImage(from, CONFIG.IMAGES.location,
-      `📍 *HAMAARA PATA*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🏠 ${CONFIG.RESTAURANT.address}\n\n📞 ${CONFIG.RESTAURANT.phone}\n🌐 ${CONFIG.RESTAURANT.website}\n\n🗺️ ${CONFIG.RESTAURANT.maps}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*0* 🏠  Home`);
+      `📍 *HAMAARA PATA*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🏠 ${CONFIG.RESTAURANT.address}\n\n` +
+      `📞 ${CONFIG.RESTAURANT.phone}\n` +
+      `🌐 ${CONFIG.RESTAURANT.website}\n\n` +
+      `🗺️ *Google Maps:*\n${CONFIG.RESTAURANT.maps}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `*0* 🏠  Home`
+    );
   }
-  return await send(from, `⚠️ 1 se 5 ke beech number chunein.\n\n*0* 🏠  Home`);
+  return await sendWelcome(from);
 }
 
-async function sendMenuCategories(from) {
-  await sendImage(from, CONFIG.IMAGES.menu,
-    `🍽️ *HAMAARA MENU*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nKaun si category? 👇\n\n*1* ⭐  Best Sellers\n*2* 🍽️  Special Items\n*3* 📜  Poora Menu\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*0* 🏠  Home`);
+// ════════════════════════════════════════
+//  MENU CATEGORIES
+// ════════════════════════════════════════
+async function sendMenuCategories(from, ordering) {
+  await send(from,
+    `📋 *MENU CATEGORIES*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `*1* ⭐  Best Sellers — Top dishes\n` +
+    `*2* 🍽️  Special Items — Unique flavors\n` +
+    `*3* 📜  Poora Menu — Sab kuch\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    (ordering ? `🛒 *cart* — Cart dekhein\n` : `🛒 *order* — Order karein\n`) +
+    `*0* 🏠  Home`
+  );
 }
 
 async function handleMenuCategory(from, t, ses) {
-  const cats = Object.keys(CONFIG.MENU);
-  let items = [], catName = "";
-  if (t === "1") { catName = cats[0]; items = CONFIG.MENU[cats[0]]; }
-  else if (t === "2") { catName = cats[1]; items = CONFIG.MENU[cats[1]]; }
-  else if (t === "3") { items = [...CONFIG.MENU[cats[0]], ...CONFIG.MENU[cats[1]]]; catName = "📜 Poora Menu"; }
-  else return await send(from, `⚠️ 1, 2 ya 3 chunein.\n\n*0* 🏠  Home`);
-  ses._currentCat = catName; ses.step = "browsing";
-  const lines = items.map(i => `*${i.id}* — ${i.naam}\n     ₹${i.price} — _${i.desc}_`).join("\n\n");
-  await send(from, `${catName}\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${lines}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n${ses._ordering ? `🛒 Item ID type karein\n_Example: BS01_\n\n*cart* — Cart dekhein\n` : ``}*0* 🏠  Home`);
+  let category = null;
+  if (t === "1" || t.includes("best")) category = "⭐ Best Sellers";
+  if (t === "2" || t.includes("special")) category = "🍽️ Special Items";
+
+  if (t === "3" || t.includes("poora") || t.includes("full") || t.includes("sab")) {
+    ses.step = "browsing";
+    ses._currentCat = "ALL";
+    return await sendFullMenu(from, ses._ordering);
+  }
+  if (!category) {
+    return await send(from, `⚠️ Kripya *1*, *2* ya *3* type karein.\n\n*0* 🏠  Home`);
+  }
+
+  ses.step = "browsing";
+  ses._currentCat = category;
+  return await sendCategoryMenu(from, category, ses._ordering);
 }
 
+// ════════════════════════════════════════
+//  CATEGORY MENU DISPLAY
+// ════════════════════════════════════════
+async function sendCategoryMenu(from, category, ordering) {
+  const items = CONFIG.MENU[category];
+  let text = `📋 *${category}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  items.forEach((item, idx) => {
+    text += `*${idx + 1}.* ${item.naam} — *₹${item.price}*\n`;
+    text += `    _${item.desc}_\n\n`;
+  });
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  if (ordering) {
+    text += `🛒 Number type karein — cart mein add hoga\n`;
+    text += `   _Example: *3* (Dal Tadka add hoga)_\n\n`;
+    text += `*cart* — Cart dekhein ✅\n`;
+  } else {
+    text += `🛒 *order* — Is menu se order karein\n`;
+  }
+  text += `*back* — Dusri category\n`;
+  text += `*0* 🏠  Home`;
+  await sendImage(from, CONFIG.IMAGES.menu, text);
+}
+
+async function sendFullMenu(from, ordering) {
+  let text = `📋 *${CONFIG.RESTAURANT.naam}*\n*— POORA MENU —*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  for (const [cat, items] of Object.entries(CONFIG.MENU)) {
+    text += `*${cat}*\n`;
+    items.forEach(i => { text += `  • ${i.naam} — ₹${i.price}\n`; });
+    text += "\n";
+  }
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  if (ordering) {
+    text += `🛒 Category chunein items add karne ke liye:\n*1* Best Sellers | *2* Special Items\n\n`;
+  } else {
+    text += `🛒 *order* — Order karein\n`;
+  }
+  text += `*0* 🏠  Home`;
+  await send(from, text);
+}
+
+// ════════════════════════════════════════
+//  BROWSING — Add to Cart
+// ════════════════════════════════════════
 async function handleBrowsing(from, t, ses) {
-  if (!ses._ordering) return await send(from, `ℹ️ Order karne ke liye *2* type karein.\n\n*0* 🏠  Home`);
-  const allItems = Object.values(CONFIG.MENU).flat();
-  const item = allItems.find(i => i.id === t.toUpperCase());
-  if (!item) return await send(from, `⚠️ *${t.toUpperCase()}* nahi mila.\nSahi ID likhein jaise *BS01*\n\n*cart* — Cart\n*0* 🏠  Home`);
-  const existing = ses.cart.find(c => c.id === item.id);
-  if (existing) existing.qty += 1;
-  else ses.cart.push({ ...item, qty: 1 });
-  await send(from, `✅ *${item.naam}* add hua! ₹${item.price}\n\n🛒 Cart mein *${ses.cart.reduce((s,c)=>s+c.qty,0)}* items\n\n*cart* — Cart dekhein\n*0* 🏠  Home`);
+  if (t === "back" || t === "b") {
+    ses.step = "menu_category";
+    return await sendMenuCategories(from, ses._ordering);
+  }
+  if (t === "order") {
+    ses._ordering = true;
+    ses.cart = [];
+    ses.step = "menu_category";
+    return await sendMenuCategories(from, true);
+  }
+
+  // Add item to cart (only in ordering mode)
+  if (ses._ordering && ses._currentCat && ses._currentCat !== "ALL") {
+    const items = CONFIG.MENU[ses._currentCat];
+    const idx   = parseInt(t) - 1;
+    if (!isNaN(idx) && idx >= 0 && idx < items.length) {
+      const item     = items[idx];
+      const existing = ses.cart.find(c => c.id === item.id);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        ses.cart.push({ ...item, qty: 1 });
+      }
+      const total     = ses.cart.reduce((s, c) => s + c.price * c.qty, 0);
+      const cartCount = ses.cart.reduce((s, c) => s + c.qty, 0);
+      return await send(from,
+        `✅ *CART MEIN ADD!*\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+        `🍽️ *${item.naam}*\n` +
+        `💰 ₹${item.price} per plate\n\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `🛒 Cart: *${cartCount} item(s)* — Total: *₹${total}*\n\n` +
+        `Aur kuch add karna hai? 😋\n` +
+        `Number type karein\n\n` +
+        `*cart* — Cart dekhein & order karein ✅\n` +
+        `*back* — Dusri category\n` +
+        `*0* 🏠  Home`
+      );
+    }
+  }
+
+  return await send(from,
+    `⚠️ Samajh nahi aaya.\n\n` +
+    `🔢 Item ka number type karein\n` +
+    `*cart* — Cart dekhein\n` +
+    `*back* — Wapas jaein\n` +
+    `*0* 🏠  Home`
+  );
 }
 
+// ════════════════════════════════════════
+//  CART
+// ════════════════════════════════════════
 async function showCart(from, ses) {
-  if (!ses.cart.length) return await send(from, `🛒 *CART KHALI HAI*\n\n*2* type karein order ke liye\n\n*0* 🏠  Home`);
-  const lines = ses.cart.map(c => `• ${c.naam} ×${c.qty} = ₹${c.price * c.qty}`).join("\n");
-  const total = ses.cart.reduce((s,c) => s + c.price * c.qty, 0);
-  await send(from, `🛒 *AAPKA CART*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n${lines}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n💰 *TOTAL: ₹${total}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n*checkout* — Order place karein\n*clear*    — Cart saaf karein\n*0* 🏠  Home`);
+  if (!ses.cart || ses.cart.length === 0) {
+    return await send(from,
+      `🛒 *CART KHAALI HAI!*\n\n` +
+      `Menu se kuch items chunein 😊\n\n` +
+      `*1* — Menu dekhein\n` +
+      `*2* — Order start karein\n` +
+      `*0* 🏠  Home`
+    );
+  }
+  const total = ses.cart.reduce((s, c) => s + c.price * c.qty, 0);
+  let text = `🛒 *AAPKA CART*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  ses.cart.forEach((item, i) => {
+    text += `*${i + 1}.* ${item.naam}\n`;
+    text += `    ${item.qty} × ₹${item.price} = *₹${item.price * item.qty}*\n\n`;
+  });
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `💰 *KULL TOTAL: ₹${total}*\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  text += `*confirm* ✅ — Order place karein\n`;
+  text += `*add* ➕ — Aur items add karein\n`;
+  text += `*clear* 🗑️ — Cart khaali karein\n`;
+  text += `*0* 🏠  Home`;
+  await send(from, text);
 }
 
 async function handleCart(from, t, ses) {
-  if (t === "checkout") {
-    if (!ses.cart.length) return await send(from, `🛒 Cart khali hai!\n\n*0* 🏠  Home`);
+  if (["confirm","yes","ok","haan","ha","han"].includes(t)) {
     ses.step = "order_type";
-    return await send(from, `📦 *ORDER TYPE*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n*1* 🏠  Home Delivery\n*2* 🍽️  Dine-In\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*0* 🏠  Home`);
+    return await send(from,
+      `📦 *ORDER TYPE CHUNEIN*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `Aap kaise order chahte hain?\n\n` +
+      `*1* 🏠  *Home Delivery*\n` +
+      `*2* 🍽️  *Dine In* (Restaurant mein khana)\n` +
+      `*3* 📦  *Takeaway* (Parcel le jaana)\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `*0* 🏠  Home`
+    );
   }
-  if (t === "clear") { ses.cart = []; return await send(from, `🗑️ Cart saaf!\n\n*0* 🏠  Home`); }
+  if (t === "add" || t === "a") {
+    ses.step = "menu_category";
+    ses._ordering = true;
+    return await sendMenuCategories(from, true);
+  }
+  if (t === "clear") {
+    ses.cart = [];
+    resetSession(from);
+    return await send(from,
+      `🗑️ *Cart khaali kar di!*\n\n` +
+      `Naya order karne ke liye:\n` +
+      `*2* — Order karein\n` +
+      `*0* 🏠  Home`
+    );
+  }
   return await showCart(from, ses);
 }
 
+// ════════════════════════════════════════
+//  ORDER TYPE
+// ════════════════════════════════════════
 async function handleOrderType(from, t, ses) {
-  if (t === "1") { ses.orderType = "Home Delivery"; ses.step = "get_name"; return await send(from, `👤 *AAPKA NAAM*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nDelivery ke liye naam chahiye 😊\n\n📝 _Example: Rahul Sharma_\n\n*0* 🏠  Home`); }
-  if (t === "2") { ses.orderType = "Dine-In"; ses.step = "get_name"; return await send(from, `👤 *AAPKA NAAM*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nDine-in ke liye naam chahiye 😊\n\n📝 _Example: Rahul Sharma_\n\n*0* 🏠  Home`); }
-  return await send(from, `⚠️ 1 ya 2 chunein.\n\n*0* 🏠  Home`);
+  const types = {
+    "1": "🏠 Home Delivery",
+    "2": "🍽️ Dine In",
+    "3": "📦 Takeaway/Parcel",
+  };
+  if (t.includes("home") || t.includes("delivery")) ses.orderType = types["1"];
+  else if (t.includes("dine") || t.includes("restaurant")) ses.orderType = types["2"];
+  else if (t.includes("takeaway") || t.includes("parcel")) ses.orderType = types["3"];
+  else if (types[t]) ses.orderType = types[t];
+  else return await send(from, `⚠️ Kripya *1*, *2* ya *3* chunein.\n\n*0* 🏠  Home`);
+
+  ses.step = "get_name";
+  return await send(from,
+    `👤 *AAPKA NAAM*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `Order ke liye aapka naam chahiye 😊\n\n` +
+    `📝 Apna *poora naam* type karein:\n` +
+    `_Example: Rahul Sharma_\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `*0* 🏠  Home`
+  );
 }
 
+// ════════════════════════════════════════
+//  GET NAME
+// ════════════════════════════════════════
 async function handleGetName(from, text, ses) {
-  if (!text || text.trim().length < 2) return await send(from, `⚠️ Sahi naam likhein.\n📝 Example: *Rahul Sharma*`);
-  ses.naam = text.trim();
-  if (ses.orderType === "Home Delivery") {
-    ses.step = "get_address";
-    return await send(from, `📍 *DELIVERY ADDRESS*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nPoora address likhein 🏠\n\n_Example: 123, Gandhi Nagar, Ujjain_\n\n*0* 🏠  Home`);
+  if (!text || text.trim().length < 2) {
+    return await send(from, `⚠️ Kripya sahi naam likhein.\n📝 Example: *Rahul Sharma*`);
   }
-  ses.address = CONFIG.RESTAURANT.address; ses.step = "confirm_order";
+  ses.naam = text.trim();
+
+  if (ses.orderType === "🏠 Home Delivery") {
+    ses.step = "get_address";
+    return await send(from,
+      `📍 *DELIVERY ADDRESS*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `Aapka delivery address kya hai? 🏠\n\n` +
+      `📝 Poora address likhein:\n` +
+      `_Example: Gali no 3, Near School, Maloda, Ujjain_\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `*0* 🏠  Home`
+    );
+  }
+  ses.step = "confirm_order";
   return await showOrderSummary(from, ses);
 }
 
+// ════════════════════════════════════════
+//  GET ADDRESS
+// ════════════════════════════════════════
 async function handleGetAddress(from, text, ses) {
-  if (!text || text.trim().length < 5) return await send(from, `⚠️ Poora address likhein.`);
-  ses.address = text.trim(); ses.step = "confirm_order";
+  if (!text || text.trim().length < 5) {
+    return await send(from, `⚠️ Kripya sahi address likhein.\n📝 Example: *Gali no 3, Maloda, Ujjain*`);
+  }
+  ses.address = text.trim();
+  ses.step    = "confirm_order";
   return await showOrderSummary(from, ses);
 }
 
+// ════════════════════════════════════════
+//  ORDER SUMMARY
+// ════════════════════════════════════════
 async function showOrderSummary(from, ses) {
-  const lines = ses.cart.map(c => `  • ${c.naam} ×${c.qty} = ₹${c.price * c.qty}`).join("\n");
-  const total = ses.cart.reduce((s,c) => s + c.price * c.qty, 0);
-  await send(from, `📋 *ORDER SUMMARY*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n👤 *Naam:* ${ses.naam}\n📦 *Type:* ${ses.orderType}\n${ses.orderType==="Home Delivery"?`📍 *Address:* ${ses.address}\n`:""}\n🍽️ *Items:*\n${lines}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n💰 *TOTAL: ₹${total}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n*haan* ✅ Confirm\n*nahi* ❌ Wapas\n*0* 🏠  Home`);
+  const total = ses.cart.reduce((s, c) => s + c.price * c.qty, 0);
+  let text = `📋 *ORDER SUMMARY*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  text += `👤 *Naam:*       ${ses.naam}\n`;
+  text += `📦 *Order Type:* ${ses.orderType}\n`;
+  if (ses.address) text += `📍 *Address:*    ${ses.address}\n`;
+  text += `\n🍽️ *Aapke Items:*\n`;
+  ses.cart.forEach(item => {
+    text += `  • ${item.naam} × ${item.qty} = ₹${item.price * item.qty}\n`;
+  });
+  text += `\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+  text += `💰 *TOTAL: ₹${total}*\n`;
+  text += `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  text += `*haan* ✅ — Confirm karein\n`;
+  text += `*nahi* ❌ — Wapas cart mein jaein\n`;
+  text += `*0* 🏠  Home`;
+  await send(from, text);
 }
 
 async function handleConfirmOrder(from, t, ses) {
   if (["haan","yes","confirm","ok","ha","han"].includes(t)) {
+    const total   = ses.cart.reduce((s, c) => s + c.price * c.qty, 0);
     const orderId = "VR" + Date.now().toString().slice(-5);
-    const total = ses.cart.reduce((s,c) => s + c.price * c.qty, 0);
-    const naam = ses.naam, address = ses.orderType === "Home Delivery" ? ses.address : "", type = ses.orderType;
-    const items = ses.cart.map(c => `  • ${c.naam} ×${c.qty}`).join("\n");
+    const naam    = ses.naam;
+    const type    = ses.orderType;
+    const address = ses.address;
+    const items   = ses.cart.map(c => `${c.naam} ×${c.qty}`).join(", ");
+
     resetSession(from);
+
     return await sendImage(from, CONFIG.IMAGES.order,
-      `🎉 *ORDER CONFIRMED!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🆔 *Order ID:* #${orderId}\n👤 *Naam:* ${naam}\n📦 *Type:* ${type}\n${address?`📍 *Address:* ${address}\n`:""}\n🍽️ *Items:*\n${items}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n💰 *TOTAL: ₹${total}*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n⏱️ *30–45 minutes*\n📞 ${CONFIG.RESTAURANT.phone}\n\n🙏 *Shukriya ${naam} ji!* 💚\n\n*0* 🏠  Home`);
-  }
-  if (["nahi","no","na","cancel"].includes(t)) { ses.step = "cart"; return await showCart(from, ses); }
-  return await send(from, `⚠️ *haan* ya *nahi* type karein.\n\n*0* 🏠  Home`);
-}
-
-async function handleTableDate(from, text, ses) {
-  if (!/\d{1,2}\/\d{1,2}\/\d{4}/.test(text)) return await send(from, `⚠️ Format: *DD/MM/YYYY*\nExample: *25/06/2025*\n\n*0* 🏠  Home`);
-  ses.booking.date = text.trim(); ses.step = "table_time";
-  return await send(from, `⏰ *SAMAY BATAYEIN*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nKitne baje aana chahte hain?\n\n📝 Format: *HH:MM AM/PM*\n📝 Example: *07:30 PM*\n\n*0* 🏠  Home`);
-}
-
-async function handleTableTime(from, text, ses) {
-  ses.booking.time = text.trim(); ses.step = "table_people";
-  return await send(from, `👥 *KITNE LOG?*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nKitne logon ke liye table chahiye?\n\n📝 Sirf number: *4*\n\n*0* 🏠  Home`);
-}
-
-async function handleTablePeople(from, text, ses) {
-  const num = parseInt(text);
-  if (isNaN(num) || num < 1 || num > 50) return await send(from, `⚠️ 1–50 ke beech number likhein.\n\n*0* 🏠  Home`);
-  ses.booking.people = num; ses.step = "table_name";
-  return await send(from, `👤 *AAPKA NAAM*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\nBooking ke liye naam chahiye 😊\n\n📝 _Example: Rahul Sharma_\n\n*0* 🏠  Home`);
-}
-
-async function handleTableName(from, text, ses) {
-  if (!text || text.trim().length < 2) return await send(from, `⚠️ Sahi naam likhein.`);
-  ses.naam = text.trim(); ses.step = "table_confirm";
-  const b = ses.booking;
-  await send(from, `📋 *BOOKING SUMMARY*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n👤 *Naam:*    ${ses.naam}\n📅 *Tarikh:*  ${b.date}\n⏰ *Samay:*   ${b.time}\n👥 *Log:*     ${b.people} person(s)\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n*haan* ✅ Confirm\n*nahi* ❌ Wapas\n*0* 🏠  Home`);
-}
-
-async function handleTableConfirm(from, t, ses) {
-  if (["haan","yes","confirm","ok","ha","han"].includes(t)) {
-    const b = ses.booking, naam = ses.naam, bookId = "BK" + Date.now().toString().slice(-5);
-    resetSession(from);
-    return await send(from, `🎉 *TABLE BOOKING CONFIRMED!*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n🆔 *Booking ID:* #${bookId}\n👤 *Naam:*       ${naam}\n📅 *Tarikh:*     ${b.date}\n⏰ *Samay:*      ${b.time}\n👥 *Log:*        ${b.people} person(s)\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n📞 ${CONFIG.RESTAURANT.phone}\n\n🙏 *Shukriya ${naam} ji!* 💚\n\n*0* 🏠  Home`);
-  }
-  if (["nahi","no","na","cancel"].includes(t)) { ses.step = "table_date"; ses.booking = {}; return await send(from, `🔄 Dobara tarikh chunein:\n\n📝 Format: *DD/MM/YYYY*\n\n*0* 🏠  Home`); }
-  return await send(from, `⚠️ *haan* ya *nahi* type karein.\n\n*0* 🏠  Home`);
-}
-
-async function sendHelp(from) {
-  await send(from, `ℹ️ *HELP*\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n*hi* — Main menu\n*1* — Menu\n*2* — Order\n*3* — Table booking\n*4* — Timing\n*5* — Location\n*cart* — Cart\n*0* — Home\n*?* — Help\n\n📞 ${CONFIG.RESTAURANT.phone}\n🌐 ${CONFIG.RESTAURANT.website}`);
-}
-
-async function send(to, body) {
-  await callWhatsApp(to, { type:"text", text:{ body, preview_url:false } });
-}
-
-async function sendImage(to, imageUrl, caption) {
-  try {
-    await callWhatsApp(to, { type:"image", image:{ link:imageUrl, caption } });
-  } catch {
-    await send(to, caption);
-  }
-}
-
-async function callWhatsApp(to, msgObj) {
-  const res = await fetch(
-    `https://graph.facebook.com/v19.0/${CONFIG.PHONE_NUMBER_ID}/messages`,
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${CONFIG.WHATSAPP_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ messaging_product:"whatsapp", recipient_type:"individual", to, ...msgObj }),
-    }
-  );
-  const data = await res.json();
-  if (!res.ok) console.error("WhatsApp API Error:", JSON.stringify(data));
-}
-
-app.get("/", (req, res) => res.json({ status:"🟢 Online", restaurant:CONFIG.RESTAURANT.naam, message:"WhatsApp Bot chal raha hai!" }));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`\n🍽️  ${CONFIG.RESTAURANT.naam} — WhatsApp Bot\n✅ Port ${PORT} — Ready!\n`));
+      `🎉 *ORDER CONFIRM HO GAYA!*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `🆔 *Order ID:* #${orderId}\n` +
+      `👤 *Naam:* ${naam}\n` +
+      `📦 *Type:* ${type}\n` +
+      (address ? `📍 *Address:* ${address}\n` : "") +
+      `\n🍽️ *Items:*\n${items.split(", ").map(i => `  • ${i}`).join("\n")}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `💰 *TOTAL: ₹${total}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `⏱️ *Taiyari samay: 30–45 minutes*\n\n` +
+      `📞 Kisi bhi sawaal ke liye:\n` +
+      `${CONFIG.RESTAURANT.phone}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━
