@@ -106,6 +106,8 @@ Rules:
     });
 
     const data = await response.json();
+console.error("Groq Response Status:", response.status);
+console.error("Groq Response:", JSON.stringify(data));
     const aiReply = data.choices?.[0]?.message?.content;
 
     if (aiReply) {
@@ -119,7 +121,9 @@ Rules:
     return buildMainMenu();
 
   } catch (err) {
-    console.error("AI Error:", err.message);
+    console.error("AI Error Full:", JSON.stringify(err));
+    console.error("AI Error Message:", err.message);
+    console.error("GROQ KEY exists:", !!CONFIG.GROQ_API_KEY);
     return buildMainMenu();
   }
 }
