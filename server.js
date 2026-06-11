@@ -6,17 +6,14 @@ const CONFIG = {
   VERIFY_TOKEN: "myrestaurant2024",
   WHATSAPP_TOKEN: process.env.WHATSAPP_TOKEN,
   PHONE_NUMBER_ID: process.env.PHONE_NUMBER_ID,
-  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  GROQ_API_KEY: process.env.GROQ_API_KEY,
 
   RESTAURANT: {
     naam: "Vrindavan Restaurant",
     address: "Runija-Khachrod Road, Bhatpachlana, Maloda, Ujjain, MP - 456313",
     phone: "+91-9303984127",
     website: "vrindavanrestro.in",
-    timing: {
-      weekday: "Somvar–Shanivaar: Subah 11 baje – Raat 11:30 baje",
-      weekend: "Ravivaar: Subah 11 baje – Raat 11:30 baje",
-    },
+    timing: "Roz Subah 11 baje se Raat 11:30 baje tak",
   },
 
   MENU: {
@@ -53,7 +50,7 @@ const orders = {};
 const sessions = {};
 const chatHistory = {};
 
-// ─── GEMINI AI ────────────────────────────────────
+// ─── GROQ AI ──────────────────────────────────────
 async function getAIReply(userMessage, from) {
   try {
     const systemPrompt = `Tu Vrindavan Restaurant ka helpful WhatsApp assistant hai.
@@ -63,7 +60,7 @@ Restaurant Info:
 - Address: ${CONFIG.RESTAURANT.address}
 - Phone: ${CONFIG.RESTAURANT.phone}
 - Website: ${CONFIG.RESTAURANT.website}
-- Timing: Roz Subah 11 baje se Raat 11:30 baje tak
+- Timing: ${CONFIG.RESTAURANT.timing}
 
 Menu:
 Starters: Paneer Tikka Rs.220, Veg Spring Roll Rs.160, Chicken 65 Rs.260
@@ -74,7 +71,7 @@ Drinks: Lassi Rs.80, Masala Chai Rs.30, Cold Coffee Rs.120
 
 Rules:
 - Hindi ya Hinglish mein jawab de
-- Short aur helpful jawab de
+- Short aur helpful jawab de - 2-3 lines maximum
 - Agar order karna ho to "order" likhne ko kaho
 - Agar table book karni ho to "table" likhne ko kaho
 - Menu ke baare mein poochhe to seedha price bata
@@ -84,34 +81,37 @@ Rules:
 
     chatHistory[from].push({
       role: "user",
-      parts: [{ text: userMessage }]
+      content: userMessage
     });
 
     if (chatHistory[from].length > 10) {
       chatHistory[from] = chatHistory[from].slice(-10);
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${CONFIG.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemPrompt }]
-          },
-          contents: chatHistory[from]
-        })
-      }
-    );
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${CONFIG.GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama3-8b-8192",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...chatHistory[from]
+        ],
+        max_tokens: 300,
+        temperature: 0.7,
+      })
+    });
 
     const data = await response.json();
-    const aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    const aiReply = data.choices?.[0]?.message?.content;
 
     if (aiReply) {
       chatHistory[from].push({
-        role: "model",
-        parts: [{ text: aiReply }]
+        role: "assistant",
+        content: aiReply
       });
       return aiReply;
     }
@@ -171,7 +171,7 @@ async function handleMessage(from, text) {
   if (text === "2" || text.includes("order")) {
     sessions[from] = "ordering";
     orders[from] = { items: "", naam: "", status: "pending" };
-    return `*ORDER KAREIN*\n\nIs format mein likhein:\n\n*Naam: Rahul*\n*Order: Butter Chicken x2, Naan x3*\n\nMenu dekhne ke liye *menu* likhein`;
+    return `ORDER KAREIN\n\nIs format mein likhein:\n\nNaam: Rahul\nOrder: Butter Chicken x2, Naan x3\n\nMenu dekhne ke liye "menu" likhein`;
   }
 
   // Order confirm
@@ -186,13 +186,13 @@ async function handleMessage(from, text) {
       sessions[from] = "idle";
       return `ORDER CONFIRM!\n\nNaam: ${naam}\nItems: ${items}\nTime: 30-45 minutes\nPhone: ${CONFIG.RESTAURANT.phone}\n\nShukriya ${naam} ji!`;
     }
-    return `Sahi format mein likhein:\n*Naam: Aapka Naam*\n*Order: Item x quantity*`;
+    return `Sahi format mein likhein:\nNaam: Aapka Naam\nOrder: Item x quantity`;
   }
 
   // Table booking
   if (text === "3" || text.includes("table") || text.includes("book")) {
     sessions[from] = "booking";
-    return `TABLE BOOKING\n\nIs format mein likhein:\n*Tarikh: DD/MM/YYYY*\n*Samay: HH:MM AM/PM*\n*Log: Kitne log*\n*Naam: Aapka Naam*`;
+    return `TABLE BOOKING\n\nIs format mein likhein:\nTarikh: DD/MM/YYYY\nSamay: HH:MM AM/PM\nLog: Kitne log\nNaam: Aapka Naam`;
   }
 
   if (state === "booking" && text.includes("tarikh:")) {
@@ -202,19 +202,19 @@ async function handleMessage(from, text) {
 
   // Timing
   if (text === "4" || text.includes("time") || text.includes("timing")) {
-    return `HUMARA SAMAY\n\n${CONFIG.RESTAURANT.timing.weekday}\n${CONFIG.RESTAURANT.timing.weekend}\n\nPhone: ${CONFIG.RESTAURANT.phone}`;
+    return `HUMARA SAMAY\n\n${CONFIG.RESTAURANT.timing}\n\nPhone: ${CONFIG.RESTAURANT.phone}`;
   }
 
   // Location
   if (text === "5" || text.includes("location") || text.includes("address") || text.includes("kahan")) {
-    return `HAMARA PATA\n\n${CONFIG.RESTAURANT.address}\nPhone: ${CONFIG.RESTAURANT.phone}\nWebsite: ${CONFIG.RESTAURANT.website}\n\nGoogle Maps:\nhttps://maps.google.com/?q=Vrindavan+Restaurant+Maloda+Ujjain`;
+    return `HAMARA PATA\n\n${CONFIG.RESTAURANT.address}\nPhone: ${CONFIG.RESTAURANT.phone}\nWebsite: ${CONFIG.RESTAURANT.website}`;
   }
 
   // Order status
   if (text.includes("status")) {
     const o = orders[from];
     if (o) return `ORDER STATUS\n\nNaam: ${o.naam}\nItems: ${o.items}\nStatus: ${o.status.toUpperCase()}`;
-    return `Koi active order nahi. Order ke liye *order* likhein.`;
+    return `Koi active order nahi. Order ke liye "order" likhein.`;
   }
 
   // AI handle karega baaki sab
@@ -233,7 +233,7 @@ function buildMenuText() {
     items.forEach(i => { text += `  ${i.naam} - Rs.${i.price}\n`; });
     text += "\n";
   }
-  text += `Order ke liye: *order* likhein\nPhone: ${CONFIG.RESTAURANT.phone}`;
+  text += `Order ke liye: "order" likhein\nPhone: ${CONFIG.RESTAURANT.phone}`;
   return text;
 }
 
